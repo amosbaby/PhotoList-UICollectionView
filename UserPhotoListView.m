@@ -11,12 +11,6 @@
 #import "MWPhotoBrowser.h"
 #import "CustomCollectionCell.h"
 
-#import "QiniuSDK.h"
-#import "PhotoModel.h"
-#import "QiniuTokenResponseModel.h"
-#import "QiniuTokenModel.h"
-#import "AssetsUtil.h"
-#import "QiNiuPhotoURLHandle.h"
 @interface UserPhotoListView ()<UICollectionViewDelegate,UICollectionViewDataSource,JKImagePickerControllerDelegate,MWPhotoBrowserDelegate,UIAlertViewDelegate,UIActionSheetDelegate,UINavigationControllerDelegate,UIImagePickerControllerDelegate>
 
 
@@ -38,29 +32,20 @@
 @property(nonatomic, strong) NSMutableArray * addPhotoList;
 
 /**
- *  用户相册
+ *  用户相册--更改和显示都是用这个
  */
 @property(nonatomic, strong) NSMutableArray *albumList;
 
 
 /**
- *  用户相册
+ *  用户相册--存储保存最初的相册列表
  */
 @property(nonatomic, strong) NSMutableArray *currentPhotoList;
-/**
- *  最近动态图片列表
- */
-@property(nonatomic, strong) NSArray *lastDynamicPhotoList;
 
 /**
  *  相册的layout
  */
 @property (weak, nonatomic) IBOutlet UICollectionViewFlowLayout *layout;
-
-/**
- *  添加的图片地址
- */
-@property(nonatomic, strong) NSMutableArray *addImageUrlArr;
 
 /**
  添加照片的技术
@@ -160,23 +145,11 @@
     return _bgView;
 }
 
-
--(BOOL)hasChanges{
-    return  self.addCount > 0 || self.deletePhotoList.count > 0;
-}
-
 -(instancetype)initWithFrame:(CGRect)frame{
 
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     return [self initWithFrame:frame collectionViewLayout:layout];
 
-}
-
--(NSMutableArray *)addImageUrlArr{
-    if (!_addImageUrlArr) {
-        _addImageUrlArr = [NSMutableArray array];
-    }
-    return _addImageUrlArr;
 }
 
 -(NSMutableArray *)addPhotoList{
@@ -203,13 +176,6 @@
     return _albumList;
 }
 
--(NSArray *)lastDynamicPhotoList{
-    if (!_lastDynamicPhotoList) {
-        _lastDynamicPhotoList = [NSArray array];
-    }
-    
-    return _lastDynamicPhotoList;
-}
 
 -(void)layoutSubviews{
     [super layoutSubviews];
@@ -592,242 +558,6 @@
     [picker dismissViewControllerAnimated:NO completion:^{}];
     
     
-}
-
--(void)updatePhotoList{
-    
-    AMWeakSelf(self)
-    
-    [self.albumList enumerateObjectsUsingBlock:^(id  _Nonnull photo, NSUInteger idx, BOOL * _Nonnull stop) {
-        AMStrongSelf(self)
-        //如果是从本地相册选择的图片，那么需要上传
-        if ([photo isKindOfClass:[JKAssets class]]){
-            
-            [self.addPhotoList addObject:photo];
-            
-        }
-        
-    }];
-    
-    //如果删除或者添加列表中任何一个有值
-    if (self.deletePhotoList.count > 0 || self.addPhotoList.count > 0) {
-        //如果两个都有值，那么就调用批量修改
-        if (self.deletePhotoList.count > 0 && self.addPhotoList.count > 0) {
-            
-            [self addPhoto];
-            
-        }else if (self.deletePhotoList.count > 0){
-            
-            if (self.deletePhotoList.count == 1) {
-                [self deletePhoto];
-            }else{
-                [self updatePhoto];
-            }
-            
-        }else{
-            [self addPhoto];
-        }
-        
-    }else{
-        //如果没有那么久直接返回个人信息界面
-        [self.fatherVC.navigationController popViewControllerAnimated:YES];
-    }
-    
-}
-
-/**
- *  删除照片
- */
--(void)deletePhoto{
-    //提交删除相片
-    AMWeakSelf(self)
-    if (self.deletePhotoList.count > 0) {
-        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.fatherVC.view animated:YES];
-        hud.labelText = @"正在更新...";
-        
-        
-        [[UserManager manager] deletePhoto:self.deletePhotoList finishedBlock:^(id data, id error) {
-            [MBProgressHUD hideHUDForView:self.fatherVC.view animated:YES];
-            AMStrongSelf(self)
-            if (!error) {
-                //删除成功后清空删除相片数组缓存
-                if ([data integerValue]== ResultCode_HTTP_SUCCESS) {
-                    [self.deletePhotoList removeAllObjects];
-                    
-                    
-                    
-                    [[NSNotificationCenter defaultCenter] postNotificationName:REFRESH_PHOTOLIST object:nil];
-                    [self.fatherVC.navigationController popViewControllerAnimated:YES];
-                    
-                }else{
-                    [AlertUtil alterViewShow:@"删除照片失败!" withTitle:@""];
-                }
-            }else{
-                
-                switch ([error integerValue]) {
-                    case ResultCode_HTTP_UNKNOW_ERROR:
-                        [AlertUtil alterViewShow:@"服务器错误！" withTitle:@""];
-                        break;
-                    case ResultCode_HTTP_OFFLINE_ERROR:
-                        [AlertUtil alterViewShow:@"没有网络！" withTitle:@""];
-                        break;
-                        
-                    default:
-                        break;
-                }
-                
-            }
-            
-            
-            
-        }];
-        
-    }
-}
-
--(void)addPhoto{
-    
-    if (self.addPhotoList.count > 0) {
-        //先获取七牛token
-        __block NSString *baseUrl = nil;
-        
-        AMWeakSelf(self)
-        
-        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.fatherVC.view animated:YES];
-        hud.labelText = @"正在上传...";
-        [[UserManager manager] getQiNiuTokenType:QiniuTokenTypeAlbum count:self.addPhotoList.count finishedBlock:^(id data, id error) {
-            AMStrongSelf(self)
-            if (!error) {
-                
-                QiniuTokenResponseModel *model = data;
-                
-                
-                baseUrl = [NSString stringWithFormat:@"%@/",model.url];
-                
-                
-                //遍历token，依次上传到七牛上
-                [model.tokens enumerateObjectsUsingBlock:^(QiniuTokenModel*token, NSUInteger index, BOOL * _Nonnull stop) {
-                    
-                    BOOL finished = (index == self.addPhotoList.count - 1);
-                    
-                    [AssetsUtil getImageFromAsset:self.addPhotoList[index] compressedRate:0.3 finishedBlock:^(id image) {
-                        //每次上传一张
-                        [self uploadQinNiuToken:token.token data:image type:QiniuTokenTypeAlbum fileName:token.fileName baseUrl:baseUrl uploadAll:finished count:self.addPhotoList.count];
-                    }];
-                    
-                }];
-                
-            }else{
-                [MBProgressHUD hideHUDForView:self.fatherVC.view animated:YES];
-                
-                switch ([error integerValue]) {
-                    case ResultCode_HTTP_UNKNOW_ERROR:
-                        [AlertUtil alterViewShow:@"服务器错误！" withTitle:@""];
-                        break;
-                    case ResultCode_HTTP_OFFLINE_ERROR:
-                        [AlertUtil alterViewShow:@"没有网络！" withTitle:@""];
-                        break;
-                        
-                    default:
-                        break;
-                }
-                
-            }
-            
-        }];
-    }
-}
-
--(void) uploadQinNiuToken:(NSString *) token data:(NSData *) nsData type:(QiniuTokenType) type  fileName:(NSString*)fileName baseUrl:(NSString*)baseUrl uploadAll:(BOOL)uploadFinished count:(NSInteger)count{
-    
-    QNUploadManager *upManager = [[QNUploadManager alloc] init];
-    
-    AMWeakSelf(self)
-    
-    [upManager putData:nsData key:fileName token:token
-              complete: ^(QNResponseInfo *info, NSString *key, NSDictionary *resp) {
-                  if (resp) {
-                      
-                      AMStrongSelf(self)
-                      NSString * keyResult = [resp objectForKey:@"key"] ;
-                      //   NSLog(@"返回数据：%@" , keyResult) ;
-                      
-                      NSString*imageUrl =  [baseUrl stringByAppendingString:keyResult];
-                      
-                      [self.addImageUrlArr addObject:imageUrl];
-                      
-                      if (self.addImageUrlArr.count == count) {
-                          //如果只有一张，那么调用普通添加
-                          if (count == 1 && self.deletePhotoList.count == 0) {
-                              //上传到公司服务器
-                              [[UserManager manager] addPhoto:imageUrl finishedBlock:^(id data, NSError *error) {
-                                  
-                                  [MBProgressHUD hideHUDForView:self.fatherVC.view animated:YES];
-                                  if ([data integerValue] == ResultCode_HTTP_SUCCESS) {
-                                      
-                                      // NSLog(@"上传照片完成");
-                                      //上传完成后清空添加相片的数组
-                                      [self.addPhotoList removeAllObjects];
-                                      
-                                      [self reloadData];
-                                      [[NSNotificationCenter defaultCenter] postNotificationName:REFRESH_PHOTOLIST object:nil];
-                                      [self.fatherVC.navigationController popViewControllerAnimated:YES];
-                                  }
-                              }];
-                              
-                          }else{
-                              
-                              [self updatePhoto];
-                          }
-                          
-                      }
-                      
-                  }
-                  
-              } option:nil];
-}
-
-
-
--(void)updatePhoto{
-    
-    AMWeakSelf(self)
-    
-    //如果有多张
-    [[UserManager manager] updatePhoto:self.addImageUrlArr deleteList:self.deletePhotoList finishedBlock:^(id data, id error) {
-        AMStrongSelf(self)
-        [MBProgressHUD hideHUDForView:self.fatherVC.view animated:YES];
-        
-        if (!error) {
-            if ([data integerValue] == ResultCode_HTTP_SUCCESS) {
-                [self.addImageUrlArr removeAllObjects];
-                //NSLog(@"上传照片完成");
-                //上传完成后清空添加相片的数组
-                [self.addPhotoList removeAllObjects];
-                
-                [self reloadData];
-                [[NSNotificationCenter defaultCenter] postNotificationName:REFRESH_PHOTOLIST object:nil];
-//                [self.fatherVC.navigationController popViewControllerAnimated:YES];
-                
-                if (self.updatePhotoListComplete) {
-                    self.updatePhotoListComplete();
-                }
-            }
-        }else{
-            
-            switch ([error integerValue]) {
-                case ResultCode_HTTP_UNKNOW_ERROR:
-                    [AlertUtil alterViewShow:@"服务器错误！" withTitle:@""];
-                    break;
-                case ResultCode_HTTP_OFFLINE_ERROR:
-                    [AlertUtil alterViewShow:@"没有网络！" withTitle:@""];
-                    break;
-                    
-                default:
-                    break;
-            }
-        }
-    }];
 }
 
 @end

@@ -18,11 +18,6 @@
 @property (weak, nonatomic) IBOutlet UIImageView *imageView;
 
 /**
- 是否是头像
- */
-@property (nonatomic, assign) BOOL isHeadIcon;
-
-/**
  图片地址或者链接
  */
 @property(nonatomic, strong) id model;

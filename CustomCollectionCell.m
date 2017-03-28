@@ -16,10 +16,6 @@
  */
 @property (weak, nonatomic) IBOutlet UIButton *delteBtn;
 
-/**
- 头像标记
- */
-@property (nonatomic, weak) UIImageView * headerIconFlagView;
 
 @end
 
@@ -48,30 +44,12 @@
     imageView.clipsToBounds = YES;
     self.imageView = imageView;
     [self.contentView addSubview:imageView];
-    
-    //创建头像标记视图
-    UIImageView *headerIconFlagView = [[UIImageView alloc] init];
-    headerIconFlagView.contentMode = UIViewContentModeScaleAspectFill;
-    headerIconFlagView.clipsToBounds = YES;
-    self.headerIconFlagView = headerIconFlagView;
-    [self.contentView addSubview:headerIconFlagView];
 
     [imageView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.top.right.bottom.equalTo(self.contentView);
     }];
-    
-    [headerIconFlagView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.right.equalTo(self.contentView);
-        make.width.height.mas_equalTo(40);
-    }];
-    headerIconFlagView.hidden = YES;
 }
 
--(void)setIsHeadIcon:(BOOL)isHeadIcon{
-    _isHeadIcon = isHeadIcon;
-    
-    self.headerIconFlagView.hidden = !isHeadIcon;
-}
 
 - (void)delBtnClicked:(id)sender {
     
@@ -95,7 +73,7 @@
     }
     
     if ([model isKindOfClass:[NSString class]]) {
-        
+        //此时用的是七牛上传的，也可以直接换成图片 url
         NSURL *url = [QiNiuPhotoURLHandle getURLWithQNFormatWithPath:model paramStr:@[THUMBNAIL_SHORT_EDGE_150, CROP_CENTER_150]];
         if (url) {
             [_imageView sd_setImageWithURL:url];

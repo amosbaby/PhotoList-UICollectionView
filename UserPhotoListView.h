@@ -12,11 +12,6 @@
 @interface UserPhotoListView : UICollectionView
 
 /**
- 父控制器
- */
-@property (nonatomic, weak) UIViewController * fatherVC;
-
-/**
  用户id
  */
 @property (nonatomic, assign) NSInteger userId;
@@ -29,32 +24,9 @@
 
 
 /**
- 是否有更改
- */
-@property (nonatomic, assign) BOOL hasChanges;
-
-/**
-  更新相册完成回调
- */
-@property (nonatomic, copy) void (^updatePhotoListComplete)();
-
-/**
  更新相册高度回调
  */
 @property (nonatomic, copy) void (^changePhotoListHeightBlock)(float height);
-
-/**
- 设置头像回调
- */
-@property (nonatomic, copy) void (^setHeaderIconHandler)(id iamge);
-
-/**
- 上传或者删除图片，更新到服务器
- */
--(void)updatePhotoList;
-
-
--(void)reloadDataFromServer;
 
 
 -(void)setPhotolist:(id)data;

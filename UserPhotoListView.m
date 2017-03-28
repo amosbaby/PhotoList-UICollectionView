@@ -309,6 +309,9 @@
                 [self.albumList removeObject:data];
                 
                 [self deleteItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:index inSection:indexPath.section]]];
+                
+                //更新相册的高度
+                [self updateListViewHeight];
             }];
         }
     }
